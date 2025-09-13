@@ -27,7 +27,7 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers // Needed to read member roles
   ],
-  partials: [Partials.Channel, Partials.GuildMember] // Include GuildMember partial
+  partials: [Partials.Channel, Partials.GuildMember]
 });
 
 // ✅ Helper: parse time for reminders
@@ -40,9 +40,20 @@ function parseTime(str) {
   return num * multipliers[unit];
 }
 
-// ✅ Check support role
-function isSupport(member) {
-  return member?.roles?.cache?.has(config.supportRole);
+// ✅ Check support role (safe)
+async function isSupport(member) {
+  if (!member) return false;
+  if (member.roles.cache.has(config.supportRole)) return true;
+  // fetch member if partial
+  if (member.partial) {
+    try {
+      await member.fetch();
+      return member.roles.cache.has(config.supportRole);
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 // ✅ Rotating statuses
@@ -74,7 +85,7 @@ client.on("messageCreate", async (message) => {
 
   // Commands restricted to support role
   const supportOnlyCommands = ["calc", "upi", "ltc", "usdt", "vouch"];
-  if (supportOnlyCommands.includes(command) && !isSupport(message.member)) {
+  if (supportOnlyCommands.includes(command) && !await isSupport(message.member)) {
     return message.reply("Only support team members can use this command.");
   }
 
@@ -135,7 +146,7 @@ client.on("messageCreate", async (message) => {
     }, delay);
   }
 
-  // ✅ Vouch command (fixed parsing)
+  // ✅ Vouch command
   if (command === "vouch") {
     if (args.length < 2) return message.reply("Usage: ,vouch <productName> <price>");
 
@@ -159,24 +170,32 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ✅ Copy Button Handler
+// ✅ Copy Button Handler (fixed 100%)
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
   const [action, type] = interaction.customId.split("-");
-  if (action === "copy") {
-    let contentToCopy;
+  if (action !== "copy") return;
 
-    if (type === "vouch") {
-      contentToCopy = interaction.message.embeds[0]?.description;
+  let contentToCopy;
+
+  if (type === "vouch") {
+    contentToCopy = interaction.message.embeds[0]?.description;
+  } else {
+    const userData = config.team[interaction.user.id];
+    if (userData && userData[type]) contentToCopy = userData[type];
+  }
+
+  if (!contentToCopy) return;
+
+  try {
+    if (!interaction.replied) {
+      await interaction.reply({ content: contentToCopy, ephemeral: true });
     } else {
-      const userData = config.team[interaction.user.id];
-      if (userData && userData[type]) contentToCopy = userData[type];
+      await interaction.followUp({ content: contentToCopy, ephemeral: true });
     }
-
-    if (!contentToCopy) return;
-
-    await interaction.reply({ content: contentToCopy, ephemeral: true });
+  } catch (err) {
+    console.error("Failed to send copy interaction reply:", err);
   }
 });
 
