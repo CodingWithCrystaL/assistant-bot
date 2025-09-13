@@ -1,4 +1,12 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require("discord.js");
 const math = require("mathjs");
 const fs = require("fs");
 const express = require("express");
@@ -34,6 +42,11 @@ function parseTime(str) {
   return num * multipliers[unit];
 }
 
+// ✅ Check support role (guild only)
+function isSupport(member) {
+  return member?.roles?.cache?.has(config.supportRole);
+}
+
 // ✅ Load team.json safely
 function loadTeam() {
   if (!fs.existsSync(path)) fs.writeFileSync(path, "{}");
@@ -43,31 +56,6 @@ function loadTeam() {
 // ✅ Save team.json safely
 function saveTeam(data) {
   fs.writeFileSync(path, JSON.stringify(data, null, 2));
-}
-
-// ✅ Check support role
-function isSupport(member) {
-  return member?.roles?.cache?.has(config.supportRole);
-}
-
-// ✅ Check permissions (servers vs DMs)
-function hasPermission(message, command) {
-  const team = loadTeam();
-  const userId = message.author.id;
-
-  // Owner can use anything
-  if (userId === config.ownerId) return true;
-
-  // In DMs, only owner allowed
-  if (!message.guild) return false;
-
-  // Server permissions
-  const teamCommands = ["vouch", "upi", "ltc", "usdt"];
-  if (team[userId] && teamCommands.includes(command)) return true;
-
-  if (isSupport(message.member)) return true;
-
-  return false;
 }
 
 // ✅ Rotating statuses
@@ -82,9 +70,11 @@ const statuses = [
 let statusIndex = 0;
 client.on("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+
   setInterval(() => {
+    const status = statuses[statusIndex];
     try {
-      client.user.setActivity(statuses[statusIndex], { type: "WATCHING" });
+      client.user.setActivity(status, { type: "WATCHING" });
     } catch (err) {
       console.error("Failed to set status:", err);
     }
@@ -99,10 +89,15 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(prefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
   const team = loadTeam();
+  const isDM = message.channel.type === 1; // DM check
+  const isOwner = message.author.id === config.ownerId;
 
-  // Owner-only command: addaddy
+  // ✅ Owner-only DM command check
+  if (isDM && !isOwner) return message.reply("❌ You do not have permission to use commands in DMs.");
+
+  // ✅ ,addaddy (owner only)
   if (command === "addaddy") {
-    if (message.author.id !== config.ownerId) return;
+    if (!isOwner) return;
     if (args.length < 3) return message.reply("Usage: ,addaddy USERID TYPE ADDRESS");
 
     const [userId, type, ...addressArr] = args;
@@ -116,9 +111,10 @@ client.on("messageCreate", async (message) => {
     return message.reply(`✅ Saved ${type.toUpperCase()} for <@${userId}>: \`${address}\``);
   }
 
-  // Permissions check
-  if (!hasPermission(message, command)) {
-    return message.reply("❌ You do not have permission to use this command.");
+  // ✅ Support-only commands (guild only)
+  const supportOnly = ["calc", "upi", "ltc", "usdt", "vouch"];
+  if (!isDM && supportOnly.includes(command) && !isSupport(message.member)) {
+    return message.reply("Only support team members can use this command.");
   }
 
   // 🧮 Calculator
@@ -137,11 +133,12 @@ client.on("messageCreate", async (message) => {
   if (["upi", "ltc", "usdt"].includes(command)) {
     const data = team[message.author.id];
     if (!data || !data[command]) return message.reply("❌ No saved address found for you.");
+
     const embed = new EmbedBuilder()
       .setTitle(`${command.toUpperCase()} Address`)
       .setDescription(`\`\`\`${data[command]}\`\`\``)
       .setColor("#2ecc71")
-      .setFooter({ text: `${message.guild ? message.guild.name : "DM"} | Made by Kai` });
+      .setFooter({ text: isDM ? "Direct Message | Made by Kai" : `${message.guild.name} | Made by Kai` });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -177,7 +174,7 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setDescription(`+rep ${message.author.id} | Legit Purchased ${product} For ${price}`)
       .setColor("#0099ff")
-      .setFooter({ text: `${message.guild ? message.guild.name : "DM"} | Made by Kai` });
+      .setFooter({ text: isDM ? "Direct Message | Made by Kai" : `${message.guild.name} | Made by Kai` });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
