@@ -11,7 +11,7 @@ module.exports = {
       ltc: "ltc1qr354v0qe2mja3rq423g4x80m3lxwcf0vfp5mcv",
       usdt: "0x1DC2Fdd9Cc33ce107505aA81f1cb4811949ECAAF"
     },
-    "TEAMMATE_DISCORD_ID": {
+    "ENTER_TEAMMATE_USER_ID_HERE": { // Replace with actual Discord ID
       upi: "teammate-upi@upi",
       ltc: "teammate-ltc",
       usdt: "teammate-usdt"
