@@ -57,34 +57,28 @@ client.on("messageCreate", async (message) => {
       const expression = args.join(" ");
       if (!expression) return message.reply("❌ Please provide a math expression.");
       const result = math.evaluate(expression);
-      return message.reply(`🧮 Result: **${result}**`);
+      return message.reply(`Result: **${result}**`);
     } catch {
       return message.reply("⚠️ Invalid expression.");
     }
   }
 
-  // 💳 Payment Commands (upi, ltc, usdt)
+  // 💳 Payment Commands
   if (["upi", "ltc", "usdt"].includes(command)) {
     const data = config.team[message.author.id];
     if (!data || !data[command]) return message.reply("❌ No saved address for this command.");
 
     const embed = new EmbedBuilder()
       .setTitle(`${command.toUpperCase()} Address`)
-      .setDescription(`Here’s your **${command.toUpperCase()}**:\n\`\`\`${data[command]}\`\`\``)
+      .setDescription(`\`\`\`${data[command]}\`\`\``)
       .setColor("#2ecc71")
       .setFooter({ text: `${message.guild.name} | Made by Kai` });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId("copy-address")
+      new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}`)
     );
 
     const sent = await message.reply({ embeds: [embed], components: [row] });
-    const collector = sent.createMessageComponentCollector({ time: 60000 });
-    collector.on("collect", async (i) => {
-      if (i.customId === "copy-address" && i.user.id === message.author.id) {
-        await i.reply({ content: `📋 Copied: \`${data[command]}\``, ephemeral: true });
-      }
-    });
   }
 
   // ⏰ Remind command
@@ -99,10 +93,11 @@ client.on("messageCreate", async (message) => {
     const reminderMsg = args.slice(1).join(" ");
     if (!reminderMsg) return message.reply("❌ Provide a reminder message.");
 
-    await message.reply(`⏰ Reminder set! I will DM ${user} in **${timeArg}**.`);
+    await message.reply(`⏰ Reminder set for ${user.tag} in **${timeArg}**.`);
+
     setTimeout(async () => {
       try {
-        await user.send(`🔔 Reminder from **${message.guild.name}**:\n**${reminderMsg}**`);
+        await user.send(`Reminder: ${reminderMsg}`);
       } catch (err) {
         console.error("Failed to DM user:", err);
       }
@@ -126,12 +121,29 @@ client.on("messageCreate", async (message) => {
     );
 
     const sent = await message.reply({ embeds: [embed], components: [row] });
-    const collector = sent.createMessageComponentCollector({ time: 60000 });
-    collector.on("collect", async (i) => {
-      if (i.customId === "copy-vouch") {
-        await i.reply({ content: `📋 Copied: \`${vouchText}\``, ephemeral: true });
-      }
-    });
+  }
+});
+
+// ✅ Handle copy button interactions
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  const [action, type] = interaction.customId.split("-");
+
+  if (action === "copy") {
+    let contentToCopy;
+
+    if (type === "vouch") {
+      contentToCopy = interaction.message.embeds[0]?.description;
+    } else {
+      const cmd = type; // usdt, upi, ltc
+      const userData = config.team[interaction.user.id];
+      if (userData && userData[cmd]) contentToCopy = userData[cmd];
+    }
+
+    if (!contentToCopy) return interaction.reply({ content: "❌ Nothing to copy.", ephemeral: true });
+
+    await interaction.reply({ content: contentToCopy, ephemeral: true });
   }
 });
 
