@@ -1,7 +1,6 @@
 {
   "name": "shop-assistant-bot",
   "version": "1.0.0",
-  "description": "Assistant bot for shop tickets",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
