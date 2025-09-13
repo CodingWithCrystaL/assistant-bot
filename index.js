@@ -39,14 +39,9 @@ function isSupport(member) {
   return member?.roles?.cache?.has(config.supportRole);
 }
 
-// ✅ Load team.json safely
-function loadTeam() {
-  if (!fs.existsSync(path)) fs.writeFileSync(path, "{}");
-  return JSON.parse(fs.readFileSync(path, "utf-8"));
-}
-function saveTeam(data) {
-  fs.writeFileSync(path, JSON.stringify(data, null, 2));
-}
+// ✅ Load/Save team
+function loadTeam() { if (!fs.existsSync(path)) fs.writeFileSync(path, "{}"); return JSON.parse(fs.readFileSync(path, "utf-8")); }
+function saveTeam(data) { fs.writeFileSync(path, JSON.stringify(data, null, 2)); }
 
 // ✅ Rotating statuses
 const statuses = [
@@ -60,12 +55,14 @@ let statusIndex = 0;
 
 client.on("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+
+  // Rotate status
   setInterval(() => {
     try { client.user.setActivity(statuses[statusIndex], { type: "WATCHING" }); } catch (err) { console.error(err); }
     statusIndex = (statusIndex + 1) % statuses.length;
   }, 30000);
 
-  // Register slash commands for DMs (owner only)
+  // ✅ Auto-register slash commands globally
   const commands = [
     new SlashCommandBuilder().setName("calc").setDescription("Evaluate a math expression").addStringOption(opt => opt.setName("expression").setDescription("Math expression").setRequired(true)),
     new SlashCommandBuilder().setName("upi").setDescription("Get your UPI address"),
@@ -76,14 +73,16 @@ client.on("ready", async () => {
     new SlashCommandBuilder().setName("addaddy").setDescription("Owner only: Add team address").addStringOption(opt => opt.setName("userid").setDescription("User ID").setRequired(true)).addStringOption(opt => opt.setName("type").setDescription("upi/ltc/usdt").setRequired(true)).addStringOption(opt => opt.setName("address").setDescription("Address").setRequired(true))
   ].map(cmd => cmd.toJSON());
 
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-  await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-  console.log("✅ Slash commands registered for DMs");
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+  try {
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log("✅ Slash commands auto-registered");
+  } catch (err) { console.error("Failed to register slash commands:", err); }
 });
 
-// ✅ Prefix commands for servers
+// ✅ Prefix commands for servers (unchanged)
 client.on("messageCreate", async (message) => {
-  if (message.author.bot || !message.guild || !message.content.startsWith(prefix)) return;
+  if (message.author.bot || !message.content.startsWith(prefix) || !message.guild) return;
 
   const args = message.content.slice(prefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
@@ -92,55 +91,36 @@ client.on("messageCreate", async (message) => {
   const supportOnly = ["calc", "upi", "ltc", "usdt", "vouch"];
   if (supportOnly.includes(command) && !isSupport(message.member)) return message.reply("Only support team members can use this command.");
 
-  // Calculator
   if (command === "calc") {
-    try {
-      const expr = args.join(" ");
-      if (!expr) return message.reply("Provide expression");
-      return message.reply(`Result: **${math.evaluate(expr)}**`);
-    } catch { return message.reply("Invalid expression"); }
+    try { const expr = args.join(" "); return message.reply(`Result: **${math.evaluate(expr)}**`); } catch { return message.reply("Invalid expression"); }
   }
 
-  // Payment commands
   if (["upi","ltc","usdt"].includes(command)) {
     const data = team[message.author.id];
     if (!data || !data[command]) return message.reply("❌ No saved address found");
-    const embed = new EmbedBuilder()
-      .setTitle(`${command.toUpperCase()} Address`)
-      .setDescription(`\`\`\`${data[command]}\`\`\``)
-      .setColor("#2ecc71")
-      .setFooter({ text: `${message.guild.name} | Made by Kai` });
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}`)
-    );
+    const embed = new EmbedBuilder().setTitle(`${command.toUpperCase()} Address`).setDescription(`\`\`\`${data[command]}\`\`\``).setColor("#2ecc71").setFooter({ text: `${message.guild.name} | Made by Kai` });
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}`));
     return message.reply({ embeds:[embed], components:[row] });
   }
 
-  // Remind
   if (command === "remind") {
     const user = message.mentions.users.first();
-    if (!user) return message.reply("Mention a user");
     const delay = parseTime(args[0]);
-    if (!delay) return message.reply("Invalid time format");
     const msg = args.slice(1).join(" ");
-    if (!msg) return message.reply("Provide message");
+    if (!user || !delay || !msg) return message.reply("Usage: ,remind @user 10s message");
     message.reply(`✅ Reminder set for ${user.tag} in ${args[0]}`);
-    setTimeout(() => { user.send(`⏰ Reminder: ${msg}`).catch(()=>{}); }, delay);
+    setTimeout(()=>{ user.send(`⏰ Reminder: ${msg}`).catch(()=>{}); }, delay);
   }
 
-  // Vouch
   if (command === "vouch") {
     if (args.length<2) return message.reply("Usage: ,vouch <product> <price>");
     const price = args.pop();
     const product = args.join(" ");
-    const embed = new EmbedBuilder().setDescription(`+rep ${message.author.id} | Legit Purchased ${product} For ${price}`).setColor("#0099ff").setFooter({ text:`${message.guild.name} | Made by Kai` });
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch")
-    );
+    const embed = new EmbedBuilder().setDescription(`+rep ${message.author.id} | Legit Purchased ${product} For ${price}`).setColor("#0099ff").setFooter({ text: `${message.guild.name} | Made by Kai` });
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch"));
     return message.reply({ embeds:[embed], components:[row] });
   }
 
-  // Owner-only addaddy
   if (command === "addaddy") {
     if (message.author.id !== config.ownerId) return;
     if (args.length<3) return message.reply("Usage: ,addaddy USERID TYPE ADDRESS");
@@ -163,63 +143,22 @@ client.on("interactionCreate", async (interaction) => {
   const team = loadTeam();
   const cmd = interaction.commandName;
 
-  // Calculator
-  if (cmd==="calc") {
-    const expr = interaction.options.getString("expression");
-    try { await interaction.reply(`Result: **${math.evaluate(expr)}**`); } catch { await interaction.reply("Invalid expression"); }
-  }
-
-  // Payment
-  if (["upi","ltc","usdt"].includes(cmd)) {
-    const data = team[interaction.user.id];
-    if (!data || !data[cmd]) return interaction.reply({ content:"❌ No saved address found", ephemeral:true });
-    const embed = new EmbedBuilder().setTitle(`${cmd.toUpperCase()} Address`).setDescription(`\`\`\`${data[cmd]}\`\`\``).setColor("#2ecc71");
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${cmd}`));
-    await interaction.reply({ embeds:[embed], components:[row], ephemeral:true });
-  }
-
-  // Vouch
-  if (cmd==="vouch") {
-    const product = interaction.options.getString("product");
-    const price = interaction.options.getString("price");
-    const embed = new EmbedBuilder().setDescription(`+rep ${interaction.user.id} | Legit Purchased ${product} For ${price}`).setColor("#0099ff");
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch"));
-    await interaction.reply({ embeds:[embed], components:[row], ephemeral:true });
-  }
-
-  // Remind
-  if (cmd==="remind") {
-    const user = interaction.options.getUser("user");
-    const time = interaction.options.getString("time");
-    const msg = interaction.options.getString("message");
-    const delay = parseTime(time);
-    if (!delay) return interaction.reply({ content:"Invalid time format", ephemeral:true });
-    await interaction.reply(`✅ Reminder set for ${user.tag} in ${time}`);
-    setTimeout(()=>{ user.send(`⏰ Reminder: ${msg}`).catch(()=>{}); }, delay);
-  }
-
-  // Addaddy
-  if (cmd==="addaddy") {
-    const userId = interaction.options.getString("userid");
-    const type = interaction.options.getString("type").toLowerCase();
-    const address = interaction.options.getString("address");
-    if (!["upi","ltc","usdt"].includes(type)) return interaction.reply({ content:"Invalid type", ephemeral:true });
-    if (!team[userId]) team[userId]={};
-    team[userId][type] = address;
-    saveTeam(team);
-    await interaction.reply({ content:`✅ Saved ${type.toUpperCase()} for <@${userId}>: ${address}`, ephemeral:true });
-  }
+  if (cmd==="calc") { const expr=interaction.options.getString("expression"); try{await interaction.reply(`Result: **${math.evaluate(expr)}**`);} catch{await interaction.reply("Invalid expression");} }
+  if (["upi","ltc","usdt"].includes(cmd)) { const data=team[interaction.user.id]; if(!data||!data[cmd]) return interaction.reply({ content:"❌ No saved address", ephemeral:true }); const embed=new EmbedBuilder().setTitle(`${cmd.toUpperCase()} Address`).setDescription(`\`\`\`${data[cmd]}\`\`\``).setColor("#2ecc71"); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${cmd}`)); await interaction.reply({ embeds:[embed], components:[row], ephemeral:true }); }
+  if (cmd==="vouch") { const product=interaction.options.getString("product"); const price=interaction.options.getString("price"); const embed=new EmbedBuilder().setDescription(`+rep ${interaction.user.id} | Legit Purchased ${product} For ${price}`).setColor("#0099ff"); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch")); await interaction.reply({ embeds:[embed], components:[row], ephemeral:true }); }
+  if (cmd==="remind") { const user=interaction.options.getUser("user"); const time=interaction.options.getString("time"); const msg=interaction.options.getString("message"); const delay=parseTime(time); if(!delay)return interaction.reply({ content:"Invalid time", ephemeral:true }); await interaction.reply(`✅ Reminder set for ${user.tag} in ${time}`); setTimeout(()=>{ user.send(`⏰ Reminder: ${msg}`).catch(()=>{}); }, delay); }
+  if (cmd==="addaddy") { const userId=interaction.options.getString("userid"); const type=interaction.options.getString("type").toLowerCase(); const address=interaction.options.getString("address"); if(!["upi","ltc","usdt"].includes(type)) return interaction.reply({ content:"Invalid type", ephemeral:true }); if(!team[userId]) team[userId]={}; team[userId][type]=address; saveTeam(team); await interaction.reply({ content:`✅ Saved ${type.toUpperCase()} for <@${userId}>: ${address}`, ephemeral:true }); }
 });
 
-// ✅ Button interaction (copy)
+// ✅ Copy buttons
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   const team = loadTeam();
   let content;
   const [action,type] = interaction.customId.split("-");
-  if (type==="vouch") content = interaction.message.embeds[0]?.description;
-  else { const data=team[interaction.user.id]; if (data && data[type]) content=data[type]; }
-  if (!content) return;
+  if(type==="vouch") content = interaction.message.embeds[0]?.description;
+  else { const data=team[interaction.user.id]; if(data && data[type]) content=data[type]; }
+  if(!content) return;
   await interaction.reply({ content, ephemeral:true }).catch(()=>{});
 });
 
