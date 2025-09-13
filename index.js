@@ -63,7 +63,7 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // 💳 Payment Commands
+  // 💳 Payment Commands (upi, ltc, usdt)
   if (["upi", "ltc", "usdt"].includes(command)) {
     const data = config.team[message.author.id];
     if (!data || !data[command]) return message.reply("❌ No saved address for this command.");
@@ -71,7 +71,8 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle(`${command.toUpperCase()} Address`)
       .setDescription(`Here’s your **${command.toUpperCase()}**:\n\`\`\`${data[command]}\`\`\``)
-      .setColor("#2ecc71");
+      .setColor("#2ecc71")
+      .setFooter({ text: `${message.guild.name} | Made by Kai` });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId("copy-address")
@@ -117,7 +118,8 @@ client.on("messageCreate", async (message) => {
     const vouchText = `+rep (${message.author.id}) | Legit Purchased ${product} For ${price}`;
     const embed = new EmbedBuilder()
       .setDescription(vouchText)
-      .setColor("#0099ff");
+      .setColor("#0099ff")
+      .setFooter({ text: `${message.guild.name} | Made by Kai` });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch")
@@ -133,5 +135,5 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ✅ Login (from hosting environment variable)
+// ✅ Login
 client.login(process.env.TOKEN);
