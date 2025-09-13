@@ -21,8 +21,13 @@ const prefix = ",";
 
 // ✅ Bot Client
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
-  partials: [Partials.Channel]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers // Needed to read member roles
+  ],
+  partials: [Partials.Channel, Partials.GuildMember] // Include GuildMember partial
 });
 
 // ✅ Helper: parse time for reminders
@@ -37,10 +42,10 @@ function parseTime(str) {
 
 // ✅ Check support role
 function isSupport(member) {
-  return member.roles.cache.has(config.supportRole);
+  return member?.roles?.cache?.has(config.supportRole);
 }
 
-// ✅ Rotating dark joke statuses
+// ✅ Rotating statuses
 const statuses = [
   "I put the 'pro' in procrastination",
   "Sarcasm is my love language",
@@ -67,7 +72,7 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(prefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
-  // Only support for certain commands
+  // Commands restricted to support role
   const supportOnlyCommands = ["calc", "upi", "ltc", "usdt", "vouch"];
   if (supportOnlyCommands.includes(command) && !isSupport(message.member)) {
     return message.reply("Only support team members can use this command.");
@@ -85,25 +90,30 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // 💳 Payment Commands
+  // 💳 Payment Commands (upi, ltc, usdt)
   if (["upi", "ltc", "usdt"].includes(command)) {
-    const data = config.team[message.author.id];
-    if (!data || !data[command]) return message.reply("No saved address for this command.");
+    const userData = config.team[message.author.id];
+    if (!userData || !userData[command]) {
+      return message.reply("❌ No saved address found for you in this command.");
+    }
 
     const embed = new EmbedBuilder()
       .setTitle(`${command.toUpperCase()} Address`)
-      .setDescription(`\`\`\`${data[command]}\`\`\``)
+      .setDescription(`\`\`\`${userData[command]}\`\`\``)
       .setColor("#2ecc71")
       .setFooter({ text: `${message.guild.name} | Made by Kai` });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}`)
+      new ButtonBuilder()
+        .setLabel("Copy Address")
+        .setStyle(ButtonStyle.Secondary)
+        .setCustomId(`copy-${command}`)
     );
 
     await message.reply({ embeds: [embed], components: [row] });
   }
 
-  // ⏰ Remind command
+  // ⏰ Remind command (anyone can use)
   if (command === "remind") {
     const user = message.mentions.users.first();
     if (!user) return message.reply("Mention a user to remind.");
@@ -115,10 +125,10 @@ client.on("messageCreate", async (message) => {
     const reminderMsg = args.slice(1).join(" ");
     if (!reminderMsg) return message.reply("Provide a reminder message.");
 
-    await message.reply(`Reminder set for ${user.tag} in **${timeArg}**.`);
+    await message.reply(`✅ Reminder set for ${user.tag} in **${timeArg}**.`);
     setTimeout(async () => {
       try {
-        await user.send(`Reminder: ${reminderMsg}`);
+        await user.send(`⏰ Reminder: ${reminderMsg}`);
       } catch (err) {
         console.error("Failed to DM user:", err);
       }
@@ -130,7 +140,7 @@ client.on("messageCreate", async (message) => {
     if (args.length < 2) return message.reply("Usage: ,vouch <productName> <price>");
 
     const price = args[args.length - 1]; // Last argument = price
-    const product = args.slice(0, -1).join(" "); // Everything before = product
+    const product = args.slice(0, -1).join(" "); // All before = product name
 
     const vouchText = `+rep ${message.author.id} | Legit Purchased ${product} For ${price}`;
     const embed = new EmbedBuilder()
@@ -139,14 +149,17 @@ client.on("messageCreate", async (message) => {
       .setFooter({ text: `${message.guild.name} | Made by Kai` });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch")
+      new ButtonBuilder()
+        .setLabel("Copy Vouch")
+        .setStyle(ButtonStyle.Secondary)
+        .setCustomId("copy-vouch")
     );
 
     await message.reply({ embeds: [embed], components: [row] });
   }
 });
 
-// ✅ Handle copy button interactions
+// ✅ Copy Button Handler
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
@@ -157,9 +170,8 @@ client.on("interactionCreate", async (interaction) => {
     if (type === "vouch") {
       contentToCopy = interaction.message.embeds[0]?.description;
     } else {
-      const cmd = type; // usdt, upi, ltc
       const userData = config.team[interaction.user.id];
-      if (userData && userData[cmd]) contentToCopy = userData[cmd];
+      if (userData && userData[type]) contentToCopy = userData[type];
     }
 
     if (!contentToCopy) return;
