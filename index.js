@@ -5,7 +5,8 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  ActivityType
 } = require("discord.js");
 const math = require("mathjs");
 const express = require("express");
@@ -39,6 +40,28 @@ function parseTime(str) {
 function isSupport(member) {
   return member.roles.cache.has(config.supportRole);
 }
+
+// ✅ Rotating dark-humor statuses
+const funnyDarkStatuses = [
+  "I put the 'fun' in funeral",
+  "Watching your hopes die",
+  "Listening to existential screams",
+  "Playing with nightmares",
+  "Calculating misery rates",
+  "Delivering your daily doom"
+];
+
+client.on("ready", () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+  let i = 0;
+  setInterval(() => {
+    client.user.setActivity(funnyDarkStatuses[i % funnyDarkStatuses.length], {
+      type: ActivityType.Streaming,
+      url: "https://twitch.tv/example"
+    });
+    i++;
+  }, 5000);
+});
 
 // ✅ Command Handler
 client.on("messageCreate", async (message) => {
@@ -78,7 +101,7 @@ client.on("messageCreate", async (message) => {
       new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}`)
     );
 
-    const sent = await message.reply({ embeds: [embed], components: [row] });
+    await message.reply({ embeds: [embed], components: [row] });
   }
 
   // ⏰ Remind command
@@ -97,7 +120,7 @@ client.on("messageCreate", async (message) => {
 
     setTimeout(async () => {
       try {
-        await user.send(`Reminder: ${reminderMsg}`);
+        await user.send(reminderMsg);
       } catch (err) {
         console.error("Failed to DM user:", err);
       }
@@ -110,7 +133,7 @@ client.on("messageCreate", async (message) => {
     const price = args[1];
     if (!product || !price) return message.reply("❌ Usage: ,vouch <productName> <price>");
 
-    const vouchText = `+rep (${message.author.id}) | Legit Purchased ${product} For ${price}`;
+    const vouchText = `+rep ${message.author.id} | Legit Purchased ${product} For ${price}`;
     const embed = new EmbedBuilder()
       .setDescription(vouchText)
       .setColor("#0099ff")
@@ -120,7 +143,7 @@ client.on("messageCreate", async (message) => {
       new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch")
     );
 
-    const sent = await message.reply({ embeds: [embed], components: [row] });
+    await message.reply({ embeds: [embed], components: [row] });
   }
 });
 
@@ -141,7 +164,7 @@ client.on("interactionCreate", async (interaction) => {
       if (userData && userData[cmd]) contentToCopy = userData[cmd];
     }
 
-    if (!contentToCopy) return interaction.reply({ content: "❌ Nothing to copy.", ephemeral: true });
+    if (!contentToCopy) return; // no extra message
 
     await interaction.reply({ content: contentToCopy, ephemeral: true });
   }
