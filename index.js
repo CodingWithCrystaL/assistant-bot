@@ -57,7 +57,7 @@ client.on("ready", () => {
     const status = statuses[statusIndex];
     client.user.setActivity(status, { type: "WATCHING" }).catch(console.error);
     statusIndex = (statusIndex + 1) % statuses.length;
-  }, 5000);
+  }, 30000); // Rotate every 30s
 });
 
 // ✅ Command Handler
@@ -67,7 +67,9 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(prefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
-  if (!isSupport(message.member)) {
+  // Only support for certain commands
+  const supportOnlyCommands = ["calc", "upi", "ltc", "usdt", "vouch"];
+  if (supportOnlyCommands.includes(command) && !isSupport(message.member)) {
     return message.reply("Only support team members can use this command.");
   }
 
@@ -83,7 +85,7 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // 💳 Payment Commands (upi, ltc, usdt)
+  // 💳 Payment Commands
   if (["upi", "ltc", "usdt"].includes(command)) {
     const data = config.team[message.author.id];
     if (!data || !data[command]) return message.reply("No saved address for this command.");
@@ -123,11 +125,12 @@ client.on("messageCreate", async (message) => {
     }, delay);
   }
 
-  // ✅ Vouch command
+  // ✅ Vouch command (fixed parsing)
   if (command === "vouch") {
-    const product = args[0];
-    const price = args[1];
-    if (!product || !price) return message.reply("Usage: ,vouch <productName> <price>");
+    if (args.length < 2) return message.reply("Usage: ,vouch <productName> <price>");
+
+    const price = args[args.length - 1]; // Last argument = price
+    const product = args.slice(0, -1).join(" "); // Everything before = product
 
     const vouchText = `+rep ${message.author.id} | Legit Purchased ${product} For ${price}`;
     const embed = new EmbedBuilder()
@@ -143,7 +146,7 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ✅ Handle copy button interactions for anyone
+// ✅ Handle copy button interactions
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
