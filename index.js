@@ -1,19 +1,22 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, REST, Routes, SlashCommandBuilder } = require("discord.js");
+const { 
+  Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle 
+} = require("discord.js");
 const math = require("mathjs");
 const fs = require("fs");
 const express = require("express");
+const os = require("os");
 const config = require("./config.js");
 const path = "./team.json";
 
-// ✅ Express Keep-Alive
+// ================== EXPRESS KEEP-ALIVE ==================
 const app = express();
 app.get("/", (req, res) => res.send("Bot is alive!"));
 app.listen(process.env.PORT || 3000, () => console.log("✅ KeepAlive server running"));
 
-// ✅ Prefix
+// ================== PREFIX ==================
 const prefix = ",";
 
-// ✅ Bot Client
+// ================== CLIENT ==================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -24,7 +27,7 @@ const client = new Client({
   partials: [Partials.Channel, Partials.GuildMember]
 });
 
-// ✅ Helper: parse time
+// ================== HELPERS ==================
 function parseTime(str) {
   const match = str.match(/^(\d+)(s|m|h|d)$/);
   if (!match) return null;
@@ -34,16 +37,20 @@ function parseTime(str) {
   return num * multipliers[unit];
 }
 
-// ✅ Support role check
 function isSupport(member) {
   return member?.roles?.cache?.has(config.supportRole);
 }
 
-// ✅ Load/Save team
-function loadTeam() { if (!fs.existsSync(path)) fs.writeFileSync(path, "{}"); return JSON.parse(fs.readFileSync(path, "utf-8")); }
-function saveTeam(data) { fs.writeFileSync(path, JSON.stringify(data, null, 2)); }
+function loadTeam() { 
+  if (!fs.existsSync(path)) fs.writeFileSync(path, "{}");
+  return JSON.parse(fs.readFileSync(path, "utf-8")); 
+}
 
-// ✅ Rotating statuses
+function saveTeam(data) { 
+  fs.writeFileSync(path, JSON.stringify(data, null, 2)); 
+}
+
+// ================== ROTATING STATUS ==================
 const statuses = [
   "I put the 'pro' in procrastination",
   "Sarcasm is my love language",
@@ -53,56 +60,54 @@ const statuses = [
 ];
 let statusIndex = 0;
 
-client.on("ready", async () => {
+client.on("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
-  // Rotate status
   setInterval(() => {
-    try { client.user.setActivity(statuses[statusIndex], { type: "WATCHING" }); } catch (err) { console.error(err); }
+    try {
+      client.user.setActivity(statuses[statusIndex], { type: "WATCHING" });
+    } catch (err) { console.error("Status error:", err); }
     statusIndex = (statusIndex + 1) % statuses.length;
   }, 30000);
-
-  // ✅ Auto-register slash commands globally
-  const commands = [
-    new SlashCommandBuilder().setName("calc").setDescription("Evaluate a math expression").addStringOption(opt => opt.setName("expression").setDescription("Math expression").setRequired(true)),
-    new SlashCommandBuilder().setName("upi").setDescription("Get your UPI address"),
-    new SlashCommandBuilder().setName("ltc").setDescription("Get your LTC address"),
-    new SlashCommandBuilder().setName("usdt").setDescription("Get your USDT address"),
-    new SlashCommandBuilder().setName("vouch").setDescription("Create a vouch").addStringOption(opt => opt.setName("product").setDescription("Product name").setRequired(true)).addStringOption(opt => opt.setName("price").setDescription("Price").setRequired(true)),
-    new SlashCommandBuilder().setName("remind").setDescription("Remind a user").addUserOption(opt => opt.setName("user").setDescription("User to remind").setRequired(true)).addStringOption(opt => opt.setName("time").setDescription("Time like 10s, 5m").setRequired(true)).addStringOption(opt => opt.setName("message").setDescription("Reminder message").setRequired(true)),
-    new SlashCommandBuilder().setName("addaddy").setDescription("Owner only: Add team address").addStringOption(opt => opt.setName("userid").setDescription("User ID").setRequired(true)).addStringOption(opt => opt.setName("type").setDescription("upi/ltc/usdt").setRequired(true)).addStringOption(opt => opt.setName("address").setDescription("Address").setRequired(true))
-  ].map(cmd => cmd.toJSON());
-
-  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-  try {
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log("✅ Slash commands auto-registered");
-  } catch (err) { console.error("Failed to register slash commands:", err); }
 });
 
-// ✅ Prefix commands for servers (unchanged)
+// ================== PREFIX COMMAND HANDLER ==================
 client.on("messageCreate", async (message) => {
-  if (message.author.bot || !message.content.startsWith(prefix) || !message.guild) return;
+  if (message.author.bot || !message.content.startsWith(prefix)) return;
 
   const args = message.content.slice(prefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
   const team = loadTeam();
 
-  const supportOnly = ["calc", "upi", "ltc", "usdt", "vouch"];
-  if (supportOnly.includes(command) && !isSupport(message.member)) return message.reply("Only support team members can use this command.");
+  const supportOnly = ["calc","upi","ltc","usdt","vouch","remind","userinfo","stats","ping"];
+  if (supportOnly.includes(command) && message.guild && !isSupport(message.member)) 
+    return message.reply("❌ Only support role can use this command.");
 
+  // -------------------- CALCULATOR --------------------
   if (command === "calc") {
-    try { const expr = args.join(" "); return message.reply(`Result: **${math.evaluate(expr)}**`); } catch { return message.reply("Invalid expression"); }
+    try { 
+      const expr = args.join(" ");
+      if(!expr) return message.reply("Provide expression to calculate.");
+      return message.reply(`🧮 Result: **${math.evaluate(expr)}**`);
+    } catch { return message.reply("Invalid expression."); }
   }
 
+  // -------------------- PAYMENT COMMANDS --------------------
   if (["upi","ltc","usdt"].includes(command)) {
     const data = team[message.author.id];
-    if (!data || !data[command]) return message.reply("❌ No saved address found");
-    const embed = new EmbedBuilder().setTitle(`${command.toUpperCase()} Address`).setDescription(`\`\`\`${data[command]}\`\`\``).setColor("#2ecc71").setFooter({ text: `${message.guild.name} | Made by Kai` });
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}`));
+    if(!data || !data[command]) return message.reply("❌ No saved address found.");
+    const embed = new EmbedBuilder()
+      .setTitle(`${command.toUpperCase()} Address`)
+      .setDescription(`\`\`\`${data[command]}\`\`\``)
+      .setColor("#2ecc71")
+      .setFooter({ text: `${message.guild ? message.guild.name : "DM"} | Made by Kai` });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}`)
+    );
     return message.reply({ embeds:[embed], components:[row] });
   }
 
+  // -------------------- REMIND --------------------
   if (command === "remind") {
     const user = message.mentions.users.first();
     const delay = parseTime(args[0]);
@@ -112,18 +117,25 @@ client.on("messageCreate", async (message) => {
     setTimeout(()=>{ user.send(`⏰ Reminder: ${msg}`).catch(()=>{}); }, delay);
   }
 
+  // -------------------- VOUCH --------------------
   if (command === "vouch") {
-    if (args.length<2) return message.reply("Usage: ,vouch <product> <price>");
+    if (args.length < 2) return message.reply("Usage: ,vouch <product> <price>");
     const price = args.pop();
     const product = args.join(" ");
-    const embed = new EmbedBuilder().setDescription(`+rep ${message.author.id} | Legit Purchased ${product} For ${price}`).setColor("#0099ff").setFooter({ text: `${message.guild.name} | Made by Kai` });
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch"));
+    const embed = new EmbedBuilder()
+      .setDescription(`+rep ${message.author.id} | Legit Purchased ${product} For ${price}`)
+      .setColor("#0099ff")
+      .setFooter({ text: `${message.guild.name} | Made by Kai` });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch")
+    );
     return message.reply({ embeds:[embed], components:[row] });
   }
 
+  // -------------------- ADD ADDY (OWNER) --------------------
   if (command === "addaddy") {
     if (message.author.id !== config.ownerId) return;
-    if (args.length<3) return message.reply("Usage: ,addaddy USERID TYPE ADDRESS");
+    if (args.length < 3) return message.reply("Usage: ,addaddy USERID TYPE ADDRESS");
     const [userId,type,...addrArr] = args;
     const address = addrArr.join(" ");
     if (!["upi","ltc","usdt"].includes(type.toLowerCase())) return message.reply("Type must be upi/ltc/usdt");
@@ -132,34 +144,76 @@ client.on("messageCreate", async (message) => {
     saveTeam(team);
     return message.reply(`✅ Saved ${type.toUpperCase()} for <@${userId}>: ${address}`);
   }
+
+  // -------------------- STATS --------------------
+  if (command === "stats") {
+    const embed = new EmbedBuilder()
+      .setTitle("Bot Stats")
+      .setColor("#e91e63")
+      .setDescription(`
+**Guilds:** ${client.guilds.cache.size}
+**Users:** ${client.users.cache.size}
+**Uptime:** ${Math.floor(client.uptime/1000/60)} mins
+**Memory Usage:** ${(process.memoryUsage().heapUsed/1024/1024).toFixed(2)} MB
+**Platform:** ${os.platform()} ${os.arch()}
+      `)
+      .setFooter({ text: "Made by Kai" });
+    return message.reply({ embeds:[embed] });
+  }
+
+  // -------------------- PING --------------------
+  if (command === "ping") {
+    const m = await message.reply("🏓 Pinging...");
+    return m.edit(`🏓 Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${Math.round(client.ws.ping)}ms`);
+  }
+
+  // -------------------- USERINFO --------------------
+  if (command === "userinfo") {
+    let user = message.mentions.users.first() || message.author;
+    const member = message.guild?.members.cache.get(user.id);
+    const embed = new EmbedBuilder()
+      .setTitle(`User Info: ${user.tag}`)
+      .setThumbnail(user.displayAvatarURL({ dynamic:true }))
+      .setColor("#ffa500")
+      .addFields(
+        { name:"User ID", value: user.id, inline:true },
+        { name:"Bot?", value: user.bot ? "Yes" : "No", inline:true },
+        { name:"Status", value: member?.presence?.status || "offline", inline:true },
+        { name:"Joined Server", value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : "N/A", inline:true },
+        { name:"Account Created", value: `<t:${Math.floor(user.createdTimestamp/1000)}:R>`, inline:true }
+      )
+      .setFooter({ text:`${message.guild ? message.guild.name : "DM"} | Made by Kai` });
+    return message.reply({ embeds:[embed] });
+  }
+
+  // -------------------- HELP --------------------
+  if (command === "help") {
+    const embed = new EmbedBuilder()
+      .setTitle("Assistant Bot Commands")
+      .setColor("#00ffff")
+      .setDescription("Prefix: `,`\nOnly support role can use commands.")
+      .addFields(
+        { name:"💳 Payments", value: ",upi, ,ltc, ,usdt", inline:true },
+        { name:"🧮 Utility", value: ",calc, ,remind, ,vouch", inline:true },
+        { name:"ℹ️ Info", value: ",stats, ,ping, ,userinfo", inline:true },
+        { name:"⚙ Owner", value: ",addaddy", inline:true }
+      )
+      .setFooter({ text:"Made by Kai" });
+    return message.reply({ embeds:[embed] });
+  }
 });
 
-// ✅ Slash commands for owner in DMs
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.channel.type !== 1) return; // Only DMs
-  if (interaction.user.id !== config.ownerId) return interaction.reply({ content:"❌ Only owner can use in DMs", ephemeral:true });
-
-  const team = loadTeam();
-  const cmd = interaction.commandName;
-
-  if (cmd==="calc") { const expr=interaction.options.getString("expression"); try{await interaction.reply(`Result: **${math.evaluate(expr)}**`);} catch{await interaction.reply("Invalid expression");} }
-  if (["upi","ltc","usdt"].includes(cmd)) { const data=team[interaction.user.id]; if(!data||!data[cmd]) return interaction.reply({ content:"❌ No saved address", ephemeral:true }); const embed=new EmbedBuilder().setTitle(`${cmd.toUpperCase()} Address`).setDescription(`\`\`\`${data[cmd]}\`\`\``).setColor("#2ecc71"); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${cmd}`)); await interaction.reply({ embeds:[embed], components:[row], ephemeral:true }); }
-  if (cmd==="vouch") { const product=interaction.options.getString("product"); const price=interaction.options.getString("price"); const embed=new EmbedBuilder().setDescription(`+rep ${interaction.user.id} | Legit Purchased ${product} For ${price}`).setColor("#0099ff"); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch")); await interaction.reply({ embeds:[embed], components:[row], ephemeral:true }); }
-  if (cmd==="remind") { const user=interaction.options.getUser("user"); const time=interaction.options.getString("time"); const msg=interaction.options.getString("message"); const delay=parseTime(time); if(!delay)return interaction.reply({ content:"Invalid time", ephemeral:true }); await interaction.reply(`✅ Reminder set for ${user.tag} in ${time}`); setTimeout(()=>{ user.send(`⏰ Reminder: ${msg}`).catch(()=>{}); }, delay); }
-  if (cmd==="addaddy") { const userId=interaction.options.getString("userid"); const type=interaction.options.getString("type").toLowerCase(); const address=interaction.options.getString("address"); if(!["upi","ltc","usdt"].includes(type)) return interaction.reply({ content:"Invalid type", ephemeral:true }); if(!team[userId]) team[userId]={}; team[userId][type]=address; saveTeam(team); await interaction.reply({ content:`✅ Saved ${type.toUpperCase()} for <@${userId}>: ${address}`, ephemeral:true }); }
-});
-
-// ✅ Copy buttons
+// ================== COPY BUTTON HANDLER ==================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   const team = loadTeam();
   let content;
   const [action,type] = interaction.customId.split("-");
-  if(type==="vouch") content = interaction.message.embeds[0]?.description;
-  else { const data=team[interaction.user.id]; if(data && data[type]) content=data[type]; }
+  if(type === "vouch") content = interaction.message.embeds[0]?.description;
+  else { const data = team[interaction.user.id]; if(data && data[type]) content = data[type]; }
   if(!content) return;
   await interaction.reply({ content, ephemeral:true }).catch(()=>{});
 });
 
+// ================== LOGIN ==================
 client.login(process.env.TOKEN);
