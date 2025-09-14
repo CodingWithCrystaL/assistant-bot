@@ -79,7 +79,7 @@ client.on("messageCreate", async (message) => {
   const command = args.shift().toLowerCase();
   const team = loadTeam();
 
-  const supportOnly = ["calc","upi","ltc","usdt","vouch","remind","userinfo","stats","ping","notify"];
+  const supportOnly = ["calc","upi","ltc","usdt","vouch","remind","userinfo","stats","ping","notify","clear","nuke"];
   if (supportOnly.includes(command) && message.guild && !isSupport(message.member)) 
     return message.reply("❌ Only support role can use this command.");
 
@@ -188,37 +188,53 @@ client.on("messageCreate", async (message) => {
 
   // -------------------- NOTIFY --------------------
   if (command === "notify") {
-    if (!message.guild || !isSupport(message.member))
-      return message.reply("❌ Only support role can use this command in servers.");
-
     const user = message.mentions.users.first();
-    if (!user) return message.reply("Usage: ,notify @User <message>");
-    const notifyMsg = args.slice(1).join(" ");
-    if (!notifyMsg) return message.reply("Please provide a message to notify.");
-
-    user.send(`You have been notified by **${message.author.tag}** in <#${message.channel.id}>:\n\n${notifyMsg}`)
-      .catch(() => message.reply("❌ Cannot DM this user."));
-    
-    return message.reply(`✅ Notified ${user.tag}`);
+    const msg = args.slice(1).join(" ");
+    if (!user || !msg) return message.reply("Usage: ,notify @user message");
+    const channelLink = message.channel.toString();
+    user.send(`📢 You have been notified by **${message.author.tag}** in ${channelLink}:\n\n${msg}`).catch(()=>{});
+    return message.reply(`✅ ${user.tag} has been notified.`);
   }
 
-  // -------------------- BROADCAST (OWNER ONLY) --------------------
+  // -------------------- BROADCAST (OWNER) --------------------
   if (command === "broadcast") {
     if (message.author.id !== config.ownerId) return;
-    const broadcastMsg = args.join(" ");
-    if (!broadcastMsg) return message.reply("Usage: ,broadcast <message>");
+    const msg = args.join(" ");
+    if (!msg) return message.reply("Usage: ,broadcast message");
+    message.guild.members.cache.forEach(member => {
+      if(!member.user.bot) member.send(`📣 Broadcast from **${message.guild.name}**:\n\n${msg}`).catch(()=>{});
+    });
+    return message.reply("✅ Broadcast sent to all members.");
+  }
 
-    let sentCount = 0;
-    message.guild.members.fetch().then(members => {
-      members.forEach(member => {
-        if (!member.user.bot) {
-          member.send(`📢 Broadcast from the server owner:\n\n${broadcastMsg}`)
-            .then(() => sentCount++)
-            .catch(()=>{});
-        }
-      });
-      message.reply(`✅ Broadcast sent to ${sentCount} members (DMs attempted).`);
-    }).catch(err => message.reply("❌ Failed to fetch members."));
+  // -------------------- CLEAR --------------------
+  if (command === "clear") {
+    if (!message.guild) return message.reply("❌ This command can only be used in servers.");
+    const amount = parseInt(args[0]);
+    if (!amount || amount < 1 || amount > 100) return message.reply("Usage: ,clear <1-100>");
+    await message.channel.bulkDelete(amount, true).catch(err => message.reply("❌ Unable to delete messages."));
+    return message.reply(`✅ Deleted ${amount} messages`).then(msg => setTimeout(() => msg.delete().catch(()=>{}), 3000));
+  }
+
+  // -------------------- NUKE --------------------
+  if (command === "nuke") {
+    if (!message.guild) return message.reply("❌ This command can only be used in servers.");
+    const channel = message.channel;
+    const position = channel.position;
+    const parent = channel.parent;
+    const perms = channel.permissionOverwrites.cache.map(o => ({
+      id: o.id,
+      allow: o.allow.bitfield,
+      deny: o.deny.bitfield
+    }));
+    await channel.delete().catch(err => message.reply("❌ Unable to delete channel."));
+    const newChannel = await message.guild.channels.create({
+      name: channel.name,
+      type: channel.type,
+      parent: parent,
+      permissionOverwrites: perms
+    }).catch(err => console.error(err));
+    if(newChannel) newChannel.setPosition(position).catch(()=>{});
   }
 
   // -------------------- HELP --------------------
@@ -226,11 +242,12 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle("Assistant Bot Commands")
       .setColor("#00ffff")
-      .setDescription("Prefix: `,`\nOnly support role can use commands unless stated.")
+      .setDescription("Prefix: `,`\nSupport role required for commands unless noted otherwise.")
       .addFields(
         { name:"💳 Payments", value: ",upi, ,ltc, ,usdt", inline:true },
         { name:"🧮 Utility", value: ",calc, ,remind, ,vouch, ,notify", inline:true },
         { name:"ℹ️ Info", value: ",stats, ,ping, ,userinfo", inline:true },
+        { name:"🧹 Moderation", value: ",clear, ,nuke", inline:true },
         { name:"⚙ Owner", value: ",addaddy, ,broadcast", inline:true }
       )
       .setFooter({ text:"Made by Kai" });
