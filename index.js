@@ -79,7 +79,7 @@ client.on("messageCreate", async (message) => {
   const command = args.shift().toLowerCase();
   const team = loadTeam();
 
-  const supportOnly = ["calc","upi","ltc","usdt","vouch","remind","userinfo","stats","ping"];
+  const supportOnly = ["calc","upi","ltc","usdt","vouch","remind","userinfo","stats","ping","notify"];
   if (supportOnly.includes(command) && message.guild && !isSupport(message.member)) 
     return message.reply("❌ Only support role can use this command.");
 
@@ -186,17 +186,52 @@ client.on("messageCreate", async (message) => {
     return message.reply({ embeds:[embed] });
   }
 
+  // -------------------- NOTIFY --------------------
+  if (command === "notify") {
+    if (!message.guild || !isSupport(message.member))
+      return message.reply("❌ Only support role can use this command in servers.");
+
+    const user = message.mentions.users.first();
+    if (!user) return message.reply("Usage: ,notify @User <message>");
+    const notifyMsg = args.slice(1).join(" ");
+    if (!notifyMsg) return message.reply("Please provide a message to notify.");
+
+    user.send(`You have been notified by **${message.author.tag}** in <#${message.channel.id}>:\n\n${notifyMsg}`)
+      .catch(() => message.reply("❌ Cannot DM this user."));
+    
+    return message.reply(`✅ Notified ${user.tag}`);
+  }
+
+  // -------------------- BROADCAST (OWNER ONLY) --------------------
+  if (command === "broadcast") {
+    if (message.author.id !== config.ownerId) return;
+    const broadcastMsg = args.join(" ");
+    if (!broadcastMsg) return message.reply("Usage: ,broadcast <message>");
+
+    let sentCount = 0;
+    message.guild.members.fetch().then(members => {
+      members.forEach(member => {
+        if (!member.user.bot) {
+          member.send(`📢 Broadcast from the server owner:\n\n${broadcastMsg}`)
+            .then(() => sentCount++)
+            .catch(()=>{});
+        }
+      });
+      message.reply(`✅ Broadcast sent to ${sentCount} members (DMs attempted).`);
+    }).catch(err => message.reply("❌ Failed to fetch members."));
+  }
+
   // -------------------- HELP --------------------
   if (command === "help") {
     const embed = new EmbedBuilder()
       .setTitle("Assistant Bot Commands")
       .setColor("#00ffff")
-      .setDescription("Prefix: `,`\nOnly support role can use commands.")
+      .setDescription("Prefix: `,`\nOnly support role can use commands unless stated.")
       .addFields(
         { name:"💳 Payments", value: ",upi, ,ltc, ,usdt", inline:true },
-        { name:"🧮 Utility", value: ",calc, ,remind, ,vouch", inline:true },
+        { name:"🧮 Utility", value: ",calc, ,remind, ,vouch, ,notify", inline:true },
         { name:"ℹ️ Info", value: ",stats, ,ping, ,userinfo", inline:true },
-        { name:"⚙ Owner", value: ",addaddy", inline:true }
+        { name:"⚙ Owner", value: ",addaddy, ,broadcast", inline:true }
       )
       .setFooter({ text:"Made by Kai" });
     return message.reply({ embeds:[embed] });
