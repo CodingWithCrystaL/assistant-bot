@@ -71,6 +71,21 @@ client.on("ready", () => {
   }, 30000);
 });
 
+// ================== SNIPE STORAGE ==================
+const snipes = new Map();
+client.on("messageDelete", (message) => {
+  if (message.partial) return;
+  if (!message.content && !message.attachments.size) return;
+
+  snipes.set(message.channel.id, {
+    content: message.content || null,
+    author: message.author ? message.author.tag : "Unknown",
+    avatar: message.author ? message.author.displayAvatarURL() : null,
+    image: message.attachments.first() ? message.attachments.first().proxyURL : null,
+    time: Date.now()
+  });
+});
+
 // ================== PREFIX COMMAND HANDLER ==================
 client.on("messageCreate", async (message) => {
   if (message.author.bot || !message.content.startsWith(prefix)) return;
@@ -79,7 +94,7 @@ client.on("messageCreate", async (message) => {
   const command = args.shift().toLowerCase();
   const team = loadTeam();
 
-  const supportOnly = ["calc","upi","ltc","usdt","vouch","remind","userinfo","stats","ping","notify","clear","nuke"];
+  const supportOnly = ["calc","upi","ltc","usdt","vouch","remind","userinfo","stats","ping","notify","clear","nuke","snipe"];
   if (supportOnly.includes(command) && message.guild && !isSupport(message.member)) 
     return message.reply("❌ Only support role can use this command.");
 
@@ -164,7 +179,7 @@ client.on("messageCreate", async (message) => {
   // -------------------- PING --------------------
   if (command === "ping") {
     const m = await message.reply("🏓 Pinging...");
-    return m.edit(`🏓 Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${Math.round(client.ws.ping)}ms`);
+    return m.edit(`🏓 Pong! Latency: ${m.createdTimestamp - message.createdTimestamp}ms | API: ${Math.round(client.ws.ping)}ms`);
   }
 
   // -------------------- USERINFO --------------------
@@ -237,6 +252,23 @@ client.on("messageCreate", async (message) => {
     if(newChannel) newChannel.setPosition(position).catch(()=>{});
   }
 
+  // -------------------- SNIPE --------------------
+  if (command === "snipe") {
+    const snipe = snipes.get(message.channel.id);
+    if (!snipe) return message.reply("❌ Nothing to snipe here!");
+
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: snipe.author, iconURL: snipe.avatar })
+      .setDescription(snipe.content || "*[No text content]*")
+      .setColor("#ff4757")
+      .setFooter({ text: `Sniped by ${message.author.tag}` })
+      .setTimestamp(snipe.time);
+
+    if (snipe.image) embed.setImage(snipe.image);
+
+    return message.reply({ embeds: [embed] });
+  }
+
   // -------------------- HELP --------------------
   if (command === "help") {
     const embed = new EmbedBuilder()
@@ -245,7 +277,7 @@ client.on("messageCreate", async (message) => {
       .setDescription("Prefix: `,`\nSupport role required for commands unless noted otherwise.")
       .addFields(
         { name:"💳 Payments", value: ",upi, ,ltc, ,usdt", inline:true },
-        { name:"🧮 Utility", value: ",calc, ,remind, ,vouch, ,notify", inline:true },
+        { name:"🧮 Utility", value: ",calc, ,remind, ,vouch, ,notify, ,snipe", inline:true },
         { name:"ℹ️ Info", value: ",stats, ,ping, ,userinfo", inline:true },
         { name:"🧹 Moderation", value: ",clear, ,nuke", inline:true },
         { name:"⚙ Owner", value: ",addaddy, ,broadcast", inline:true }
