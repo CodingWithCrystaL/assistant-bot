@@ -1,4 +1,4 @@
-// index.js - Final fixed version with all commands working 100%
+// index.js - Final fixed version with all commands working 100% and black embeds
 const {
   Client,
   GatewayIntentBits,
@@ -81,7 +81,7 @@ function sendModLog(guild, embed) {
     if (ch && ch.send) ch.send({ embeds: [embed] }).catch(() => {});
   } catch (err) {}
 }
-function simpleEmbed(title, desc, color = "#2f3136") {
+function simpleEmbed(title, desc, color = "#000000") {
   return new EmbedBuilder().setTitle(title).setDescription(desc).setColor(color).setTimestamp();
 }
 
@@ -137,12 +137,10 @@ client.on("messageCreate", async (message) => {
     "mute","unmute","warnings","clearwarnings","serverinfo","say","poll","avatar","modlog","help"
   ];
 
-  // Owner check
   if (ownerOnly.includes(command) && message.author.id !== config.ownerId) {
     return message.reply("❌ You are not allowed to use that command.");
   }
 
-  // Support role check
   if (supportRequired.includes(command)) {
     if (message.guild) {
       if (!isSupport(message.member)) return message.reply("❌ Only support role can use this command.");
@@ -151,29 +149,31 @@ client.on("messageCreate", async (message) => {
     }
   }
 
+  // ---------------- Commands ----------------
+
   // CALC
   if (command === "calc") {
     const expr = args.join(" ");
     if (!expr) return message.reply("Usage: ,calc <expression>");
     try {
       const res = math.evaluate(expr);
-      return message.reply({ embeds: [simpleEmbed("Calculator", `\`${expr}\` → **${res}**`, "#00b894")] });
+      return message.reply({ embeds: [simpleEmbed("Calculator", `\`${expr}\` → **${res}**`)] });
     } catch {
       return message.reply("❌ Invalid expression.");
     }
   }
 
-  // PAYMENT SHOW
+  // PAYMENT SHOW - upi, ltc, usdt
   if (["upi", "ltc", "usdt"].includes(command)) {
     const data = team[message.author.id];
     if (!data || !data[command]) return message.reply("❌ No saved address found.");
     const embed = new EmbedBuilder()
       .setTitle(`${command.toUpperCase()} Address`)
       .setDescription(`\`\`\`${data[command]}\`\`\``)
-      .setColor("#2ecc71")
+      .setColor("#000000")
       .setFooter({ text: `${message.guild ? message.guild.name : "DM"} | Made by Kai` });
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}`)
+      new ButtonBuilder().setLabel("Copy Address").setStyle(ButtonStyle.Secondary).setCustomId(`copy-${command}-${message.author.id}`)
     );
     return message.reply({ embeds: [embed], components: [row] });
   }
@@ -185,10 +185,10 @@ client.on("messageCreate", async (message) => {
     const product = args.join(" ");
     const embed = new EmbedBuilder()
       .setDescription(`+rep ${message.author.id} | Legit Purchased **${product}** for **${price}**`)
-      .setColor("#0099ff")
+      .setColor("#000000")
       .setFooter({ text: `${message.guild ? message.guild.name : "DM"} | Made by Kai` });
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId("copy-vouch")
+      new ButtonBuilder().setLabel("Copy Vouch").setStyle(ButtonStyle.Secondary).setCustomId(`copy-vouch-${message.author.id}`)
     );
     return message.reply({ embeds: [embed], components: [row] });
   }
@@ -225,14 +225,14 @@ client.on("messageCreate", async (message) => {
     const data = team[id];
     if (!data) return message.reply("❌ No addresses for that user.");
     const lines = Object.entries(data).map(([k, v]) => `**${k.toUpperCase()}**: \`${v}\``).join("\n");
-    return message.reply({ embeds: [new EmbedBuilder().setTitle(`Addresses for ${id}`).setDescription(lines).setColor("#2ecc71")] });
+    return message.reply({ embeds: [new EmbedBuilder().setTitle(`Addresses for ${id}`).setDescription(lines).setColor("#000000")] });
   }
 
   // STATS
   if (command === "stats") {
     const embed = new EmbedBuilder()
       .setTitle("Bot Stats")
-      .setColor("#e91e63")
+      .setColor("#000000")
       .setDescription(`**Guilds:** ${client.guilds.cache.size}\n**Users:** ${client.users.cache.size}\n**Uptime:** ${Math.floor(client.uptime / 1000 / 60)} mins\n**Memory:** ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB\n**Platform:** ${os.platform()} ${os.arch()}`)
       .setFooter({ text: "Made by Kai" });
     return message.reply({ embeds: [embed] });
@@ -251,7 +251,7 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle(`User Info: ${user.tag}`)
       .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-      .setColor("#ffa500")
+      .setColor("#000000")
       .addFields(
         { name: "User ID", value: user.id, inline: true },
         { name: "Bot?", value: user.bot ? "Yes" : "No", inline: true },
@@ -288,7 +288,7 @@ client.on("messageCreate", async (message) => {
     const amount = parseInt(args[0]);
     if (!amount || amount < 1 || amount > 100) return message.reply("Usage: ,clear <1-100>");
     await message.channel.bulkDelete(amount, true).catch(() => message.reply("❌ Unable to delete messages."));
-    const embed = simpleEmbed("Clear", `${message.author.tag} deleted ${amount} messages in ${message.channel}`, "#ffb86b");
+    const embed = simpleEmbed("Clear", `${message.author.tag} deleted ${amount} messages in ${message.channel}`);
     sendModLog(message.guild, embed);
     return message.reply(`✅ Deleted ${amount} messages`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 3000));
   }
@@ -334,7 +334,7 @@ client.on("messageCreate", async (message) => {
     if (!warnings[user.id]) warnings[user.id] = [];
     warnings[user.id].push({ reason, by: message.author.id, time: Date.now() });
     saveFile(warningsPath, warnings);
-    sendModLog(message.guild, simpleEmbed("Warn", `${user.tag} warned by ${message.author.tag}\nReason: ${reason}`, "#ff0000"));
+    sendModLog(message.guild, simpleEmbed("Warn", `${user.tag} warned by ${message.author.tag}\nReason: ${reason}`));
     return message.reply(`✅ ${user.tag} has been warned.`);
   }
 
@@ -344,7 +344,7 @@ client.on("messageCreate", async (message) => {
     const data = warnings[user.id] || [];
     if (!data.length) return message.reply("✅ No warnings.");
     const lines = data.map((w, i) => `**${i+1}.** ${w.reason} (by <@${w.by}>)`).join("\n");
-    return message.reply({ embeds: [simpleEmbed("Warnings", lines, "#ff0000")] });
+    return message.reply({ embeds: [simpleEmbed("Warnings", lines)] });
   }
 
   // CLEARWARNINGS
@@ -366,7 +366,7 @@ client.on("messageCreate", async (message) => {
       return message.reply("❌ I don't have permission to kick.");
     }
     await member.kick("Kicked by bot").catch(() => message.reply("❌ Failed to kick."));
-    sendModLog(message.guild, simpleEmbed("Kick", `${user.tag} was kicked by ${message.author.tag}`, "#ff0000"));
+    sendModLog(message.guild, simpleEmbed("Kick", `${user.tag} was kicked by ${message.author.tag}`));
     return message.reply(`✅ ${user.tag} has been kicked.`);
   }
 
@@ -380,7 +380,7 @@ client.on("messageCreate", async (message) => {
       return message.reply("❌ I don't have permission to ban.");
     }
     await member.ban({ reason: "Banned by bot" }).catch(() => message.reply("❌ Failed to ban."));
-    sendModLog(message.guild, simpleEmbed("Ban", `${user.tag} was banned by ${message.author.tag}`, "#ff0000"));
+    sendModLog(message.guild, simpleEmbed("Ban", `${user.tag} was banned by ${message.author.tag}`));
     return message.reply(`✅ ${user.tag} has been banned.`);
   }
 
@@ -405,7 +405,7 @@ client.on("messageCreate", async (message) => {
       return message.reply("❌ I don't have permission to mute.");
     }
     await member.voice.setMute(true, "Muted by bot").catch(() => message.reply("❌ Failed to mute."));
-    sendModLog(message.guild, simpleEmbed("Mute", `${user.tag} was muted by ${message.author.tag}`, "#ff0000"));
+    sendModLog(message.guild, simpleEmbed("Mute", `${user.tag} was muted by ${message.author.tag}`));
     return message.reply(`✅ ${user.tag} has been muted.`);
   }
 
@@ -419,11 +419,9 @@ client.on("messageCreate", async (message) => {
       return message.reply("❌ I don't have permission to unmute.");
     }
     await member.voice.setMute(false, "Unmuted by bot").catch(() => message.reply("❌ Failed to unmute."));
-    sendModLog(message.guild, simpleEmbed("Unmute", `${user.tag} was unmuted by ${message.author.tag}`, "#00ff00"));
+    sendModLog(message.guild, simpleEmbed("Unmute", `${user.tag} was unmuted by ${message.author.tag}`));
     return message.reply(`✅ ${user.tag} has been unmuted.`);
   }
-
-  // WARNINGS again handled earlier, skipping...
 
   // MODLOG
   if (command === "modlog") {
@@ -440,7 +438,7 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle("Server Info")
       .setDescription(g.description || "No description")
-      .setColor("#7289da")
+      .setColor("#000000")
       .addFields(
         { name: "Name", value: g.name, inline: true },
         { name: "Members", value: `${g.memberCount}`, inline: true },
@@ -461,7 +459,7 @@ client.on("messageCreate", async (message) => {
   if (command === "poll") {
     const question = args.join(" ");
     if (!question) return message.reply("Usage: ,poll question");
-    const embed = new EmbedBuilder().setTitle("Poll").setDescription(question).setColor("#00ffff");
+    const embed = new EmbedBuilder().setTitle("Poll").setDescription(question).setColor("#000000");
     const msg = await message.channel.send({ embeds: [embed] });
     await msg.react("✅");
     await msg.react("❌");
@@ -474,7 +472,7 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle(`${user.tag}'s Avatar`)
       .setImage(user.displayAvatarURL({ dynamic: true, size: 1024 }))
-      .setColor("#00ffff");
+      .setColor("#000000");
     return message.reply({ embeds: [embed] });
   }
 
@@ -482,7 +480,7 @@ client.on("messageCreate", async (message) => {
   if (command === "help") {
     const embed = new EmbedBuilder()
       .setTitle("Assistant Bot Commands")
-      .setColor("#00ffff")
+      .setColor("#000000")
       .setDescription("Prefix: `,` • Support role required for most commands.")
       .addFields(
         { name: "Payments", value: ",upi ,ltc ,usdt (show saved)", inline: false },
@@ -505,7 +503,7 @@ client.on("messageCreate", async (message) => {
       .setAuthor({ name: data.authorTag, iconURL: data.avatar })
       .setImage(data.image || null)
       .setFooter({ text: "Deleted message" })
-      .setColor("#ff0000");
+      .setColor("#000000");
     return message.reply({ embeds: [embed] });
   }
 });
@@ -516,16 +514,14 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId.startsWith("copy-")) {
     const teamData = ensureFile(teamPath, {});
-    const key = interaction.customId.split("-")[1];
+    const parts = interaction.customId.split("-");
+    const key = parts[1];
+    const userId = parts[2];
     let content = null;
 
     if (key === "vouch") {
       content = interaction.message.embeds[0]?.description || null;
     } else {
-      const embedDesc = interaction.message.embeds[0]?.description || "";
-      const idMatch = embedDesc.match(/<@!?(\d+)>/);
-      const userId = idMatch ? idMatch[1] : null;
-      if (!userId) return interaction.reply({ content: "❌ No user data found.", ephemeral: true });
       const userData = teamData[userId] || {};
       content = userData[key] || null;
     }
